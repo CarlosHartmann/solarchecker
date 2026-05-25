@@ -131,14 +131,12 @@ def retrieve_newest_email(protonmail):
         if days_since_last_email >= 10:
             print(f"ERROR: Last email arrived {days_since_last_email} days ago.")
             try:
-                send_report_issue_warning(
-                    report_email=email_message,
+                send_issue_warning_to_issue_inbox(
                     issue_title="Report email is stale",
                     issue_details=(
                         f"Most recent report email is {days_since_last_email} days old, "
                         "which is above the 10-day threshold."
                     ),
-                    extra_recipients=[os.getenv("PROTONMAIL_ISSUES_ADDRESS", "issues@example.com")],
                 )
             except Exception as warning_error:
                 print(f"ERROR: Could not send stale-report warning email: {warning_error}")

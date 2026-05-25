@@ -93,6 +93,20 @@ def _build_report_email() -> EmailMessage:
     return message
 
 
+def _load_latest_report_email() -> EmailMessage:
+    """Load the newest real report email to test recipient extraction paths."""
+    protonmail = access_mails.connect_to_protonmail()
+    try:
+        message = access_mails.retrieve_newest_email(protonmail)
+    finally:
+        protonmail.logout()
+
+    if message is None:
+        print("WARNING: Could not load latest real report email. Falling back to synthetic headers.")
+        return _build_report_email()
+    return message
+
+
 def _write_report_workbooks(history_root: Path, folder_name: str, rows: list[dict[str, float | str]]) -> None:
     report_dir = history_root / folder_name
     report_dir.mkdir(parents=True, exist_ok=True)
@@ -220,7 +234,7 @@ def _run_inverter_mismatch_scenario(report_email: EmailMessage) -> None:
 
 def main() -> None:
     print("Running warning-email scenario tests.")
-    report_email = _build_report_email()
+    report_email = _load_latest_report_email()
 
     with temporary_env({"WARNING_EMAIL_SUBJECT_PREFIX": TEST_SUBJECT_PREFIX}):
         print("Scenario 1: Missing env vars")

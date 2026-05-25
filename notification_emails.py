@@ -20,7 +20,8 @@ REQUIRED_SMTP_ENV_VARS = [
     "PROTONMAIL_SMTP_FROM",
 ]
 # Load internal issue inbox address from environment.
-ISSUE_INBOX_RECIPIENT = os.getenv("PROTONMAIL_ISSUES_ADDRESS", "issues@example.com")
+ISSUE_INBOX_RECIPIENT = os.getenv("PROTONMAIL_ISSUES_ADDRESS", "solarweb_issues@smog.sh")
+WARNING_RECIPIENT_BLOCKLIST = {"solarweb@smog.sh"}
 
 ISSUE_TITLES = {
     "mailbox_empty": "No report emails in mailbox",
@@ -34,12 +35,15 @@ ISSUE_TITLES = {
 def _collect_report_recipients(report_email: Message | None, extra_recipients: Iterable[str] | None = None) -> list[str]:
     recipients: list[str] = []
 
+    def _normalize_address(address: str) -> str:
+        return address.strip().strip('"').strip("'")
+
     if report_email is not None:
         to_header = report_email.get("To", "")
         cc_header = report_email.get("Cc", "")
 
         for _, address in getaddresses([to_header, cc_header]):
-            cleaned = address.strip()
+            cleaned = _normalize_address(address)
             if cleaned and "@" in cleaned:
                 recipients.append(cleaned)
 
@@ -47,12 +51,15 @@ def _collect_report_recipients(report_email: Message | None, extra_recipients: I
         for address in extra_recipients:
             if not address:
                 continue
-            cleaned = address.strip()
+            cleaned = _normalize_address(address)
             if cleaned and "@" in cleaned:
                 recipients.append(cleaned)
 
     deduplicated: list[str] = []
     for address in recipients:
+        lowered = address.lower()
+        if lowered in WARNING_RECIPIENT_BLOCKLIST:
+            continue
         if address not in deduplicated:
             deduplicated.append(address)
     return deduplicated
@@ -101,15 +108,14 @@ def send_report_issue_warning(
     warning.set_content(
         "\n".join(
             [
-                "A report issue was detected by solarchecker.",
+                "Ein automatisierter Warn-Skript hat ein Problem mit der Verarbeitung der neuesten Solarweb-Berichtsemail festgestellt.",
                 "",
-                f"Issue: {issue_title}",
+                f"Kurzbeschreibung: {issue_title}",
                 "",
                 "Details:",
                 issue_details,
                 "",
-                "Original report email metadata:",
-                f"- Subject: {original_subject}",
+                "Bezieht sich auf die Report-Datei von:",
                 f"- Date: {original_date}",
             ]
         )

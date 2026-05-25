@@ -238,9 +238,9 @@ def _check_zero_production(latest_row: pd.Series) -> str | None:
     production_value = float(production)
     if production_value <= ZERO_PRODUCTION_THRESHOLD_KWH:
         return (
-            "Zero-production test failed: "
-            f"pv_production_system_total_kwh is {production_value:.3f} kWh "
-            f"for {latest_row['report_date'].date()}."
+            "Test auf Nullproduktion fehlgeschlagen: "
+            f"pv_production_system_total_kwh liegt bei {production_value:.3f} kWh "
+            f"fuer {latest_row['report_date'].date()}."
         )
     return None
 
@@ -263,9 +263,9 @@ def _check_sudden_production_drop(history_df: pd.DataFrame, latest_row: pd.Serie
     ratio = current_production / baseline if baseline else 0.0
     if ratio < SUDDEN_DROP_MIN_RATIO:
         return (
-            "Sudden production drop test failed: "
-            f"current production is {current_production:.3f} kWh versus a recent median of {baseline:.3f} kWh "
-            f"({ratio:.1%} of baseline)."
+            "Test auf ploetzlichen Produktionsabfall fehlgeschlagen: "
+            f"aktuelle Produktion ist {current_production:.3f} kWh gegenueber einem juengsten Median von {baseline:.3f} kWh "
+            f"({ratio:.1%} des Medians)."
         )
     return None
 
@@ -302,9 +302,9 @@ def _check_inverter_mismatch(history_df: pd.DataFrame, latest_row: pd.Series) ->
         underperforming_inverter = "Symo 17.5-3-M (1)"
 
     return (
-        "Inverter mismatch test failed: "
-        f"historical normalized inverter ratio median is {historical_ratio:.3f}, current ratio is {current_ratio:.3f}. "
-        f"This suggests underperformance by {underperforming_inverter}."
+        "Test auf Wechselrichter-Abweichung fehlgeschlagen: "
+        f"historischer Median des normalisierten Wechselrichter-Verhaeltnisses ist {historical_ratio:.3f}, aktuelles Verhaeltnis ist {current_ratio:.3f}. "
+        f"Das deutet auf eine Minderleistung von {underperforming_inverter} hin."
     )
 
 
@@ -331,9 +331,9 @@ def _run_panel_health_checks(history_root: Path, report_email: Message) -> list[
     try:
         send_report_issue_warning(
             report_email=report_email,
-            issue_title="Solar production anomaly detected",
+            issue_title="Anomalie in der Solarproduktion erkannt",
             issue_details="\n\n".join(findings),
-            extra_recipients=[os.getenv("PROTONMAIL_ISSUES_ADDRESS")],
+            extra_recipients=[os.getenv("PROTONMAIL_ISSUES_ADDRESS", "solarweb_issues@smog.sh")],
         )
     except Exception as warning_error:
         print(f"ERROR: Could not send panel-health warning email: {warning_error}")
