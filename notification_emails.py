@@ -108,7 +108,7 @@ def send_report_issue_warning(
     warning.set_content(
         "\n".join(
             [
-                "Ein automatisierter Warn-Skript hat ein Problem mit der Verarbeitung der neuesten Solarweb-Berichtsemail festgestellt.",
+                "Ein automatisiertes Warn-Skript hat ein Problem mit der Verarbeitung der neuesten Solarweb-Berichtsemail festgestellt.",
                 "",
                 f"Kurzbeschreibung: {issue_title}",
                 "",
