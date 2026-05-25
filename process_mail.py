@@ -17,6 +17,7 @@ from urllib.parse import unquote
 from urllib.request import Request, urlopen
 
 import pandas as pd
+from build_history_exports import build_history_exports
 from report_mappings import (
     ENERGY_BALANCE_LABELS,
     PV_PRODUCTION_LABELS,
@@ -263,6 +264,13 @@ def _print_history_dataframe_summary(history_root: Path) -> None:
     print(history_df.tail(5).to_string(index=False))
 
 
+def _refresh_history_exports(history_root: Path) -> None:
+    written_files = build_history_exports(history_root)
+    print("Updated aggregate history exports:")
+    for report_type, output_path in written_files.items():
+        print(f"- {report_type}: {output_path}")
+
+
 def _make_folder_stamp(email_message: Message) -> str:
     date_header = email_message.get("Date")
     if date_header:
@@ -282,10 +290,8 @@ def _move_to_analysis_folder(downloaded_files: list[Path], email_message: Messag
     staged_paths: list[Path] = []
     for source_path in downloaded_files:
         target_path = destination_dir / source_path.name
-        unique_counter = 1
-        while target_path.exists():
-            target_path = destination_dir / f"{source_path.stem}_{unique_counter}{source_path.suffix}"
-            unique_counter += 1
+        if target_path.exists():
+            target_path.unlink()
 
         shutil.move(str(source_path), str(target_path))
         staged_paths.append(target_path)
@@ -305,10 +311,8 @@ def _archive_downloads(analyzed_files: list[Path], email_message: Message) -> li
     stored_paths: list[Path] = []
     for source_path in analyzed_files:
         target_path = destination_dir / source_path.name
-        unique_counter = 1
-        while target_path.exists():
-            target_path = destination_dir / f"{source_path.stem}_{unique_counter}{source_path.suffix}"
-            unique_counter += 1
+        if target_path.exists():
+            target_path.unlink()
 
         shutil.move(str(source_path), str(target_path))
         stored_paths.append(target_path)
@@ -322,12 +326,14 @@ def process(email_message: Message | None) -> None:
 
     if email_message is None:
         print("No message to process.")
+        _refresh_history_exports(history_root)
         _print_history_dataframe_summary(history_root)
         return
 
     html_body = _get_email_html(email_message)
     if not html_body:
         print("No HTML content found in message.")
+        _refresh_history_exports(history_root)
         _print_history_dataframe_summary(history_root)
         return
 
@@ -337,6 +343,7 @@ def process(email_message: Message | None) -> None:
         print("Links found:")
         for link in download_links:
             print(f"- {link}")
+        _refresh_history_exports(history_root)
         _print_history_dataframe_summary(history_root)
         return
 
@@ -366,4 +373,5 @@ def process(email_message: Message | None) -> None:
     for stored in stored_paths:
         print(f"- {stored}")
 
+    _refresh_history_exports(history_root)
     _print_history_dataframe_summary(history_root)
