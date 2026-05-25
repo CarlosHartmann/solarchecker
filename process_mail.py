@@ -1,5 +1,40 @@
 """
-process_mail: Cleanly process a solarweb update email.
+process_mail: Download, normalize, archive, and analyze Solar.web report emails.
+
+Warning tests implemented
+==============================================
+
+1. Zero-production test:
+    If pv_production_system_total_kwh is zero or near zero on a day that should
+    have non-trivial production, warn.
+    Location: _check_zero_production()
+
+2. Sudden production drop test:
+    Compare today's total production against a rolling median of recent similar
+    days. If it drops below a configurable fraction, warn.
+    Location: _check_sudden_production_drop()
+
+3. Inverter mismatch test:
+    Compare the two inverter outputs. If one inverter is consistently much lower
+    than the other relative to its historical ratio, warn.
+    Location: _check_inverter_mismatch()
+
+Trigger point:
+    _run_panel_health_checks(), called from process() after the newest reports
+    have been archived and aggregate exports have been refreshed.
+
+Recommended first implementation
+================================
+
+If the customer has not defined the rule set yet, the safest first warning rule
+is usually:
+
+- a multi-day sudden production drop test, plus
+- an inverter mismatch test, plus
+- a zero-production hard failure test.
+
+Those three together are simple to explain and catch both total outages and
+partial inverter failures.
 """
 
 from __future__ import annotations
@@ -8,6 +43,7 @@ import re
 import shutil
 import tempfile
 import unicodedata
+import os
 from datetime import datetime
 from email.message import Message
 from html.parser import HTMLParser
@@ -18,12 +54,23 @@ from urllib.request import Request, urlopen
 
 import pandas as pd
 from build_history_exports import build_history_exports
+from notification_emails import send_report_issue_warning
 from report_mappings import (
     ENERGY_BALANCE_LABELS,
     PV_PRODUCTION_LABELS,
     REPORT_TYPE_PATTERNS,
     UNIT_NORMALIZATION,
 )
+
+
+ZERO_PRODUCTION_THRESHOLD_KWH = 0.1
+SUDDEN_DROP_LOOKBACK_DAYS = 7
+SUDDEN_DROP_MIN_HISTORY_DAYS = 3
+SUDDEN_DROP_MIN_RATIO = 0.35
+SUDDEN_DROP_BASELINE_MIN_KWH = 1.0
+INVERTER_MISMATCH_LOOKBACK_DAYS = 14
+INVERTER_MISMATCH_MIN_HISTORY_DAYS = 5
+INVERTER_MISMATCH_DEVIATION_RATIO = 0.35
 
 
 class DownloadLinkParser(HTMLParser):
@@ -183,6 +230,117 @@ def load_history_dataframe(history_root: Path) -> pd.DataFrame:
     return combined.sort_values(["report_date", "archive_folder"]).reset_index(drop=True)
 
 
+def _check_zero_production(latest_row: pd.Series) -> str | None:
+    production = latest_row.get("pv_production_system_total_kwh")
+    if pd.isna(production):
+        return None
+
+    production_value = float(production)
+    if production_value <= ZERO_PRODUCTION_THRESHOLD_KWH:
+        return (
+            "Zero-production test failed: "
+            f"pv_production_system_total_kwh is {production_value:.3f} kWh "
+            f"for {latest_row['report_date'].date()}."
+        )
+    return None
+
+
+def _check_sudden_production_drop(history_df: pd.DataFrame, latest_row: pd.Series) -> str | None:
+    production_column = "pv_production_system_total_kwh"
+    if production_column not in history_df.columns or pd.isna(latest_row.get(production_column)):
+        return None
+
+    prior_rows = history_df.loc[history_df["report_date"] < latest_row["report_date"]].sort_values("report_date")
+    prior_values = prior_rows[production_column].dropna().tail(SUDDEN_DROP_LOOKBACK_DAYS)
+    if len(prior_values) < SUDDEN_DROP_MIN_HISTORY_DAYS:
+        return None
+
+    baseline = float(prior_values.median())
+    if baseline < SUDDEN_DROP_BASELINE_MIN_KWH:
+        return None
+
+    current_production = float(latest_row[production_column])
+    ratio = current_production / baseline if baseline else 0.0
+    if ratio < SUDDEN_DROP_MIN_RATIO:
+        return (
+            "Sudden production drop test failed: "
+            f"current production is {current_production:.3f} kWh versus a recent median of {baseline:.3f} kWh "
+            f"({ratio:.1%} of baseline)."
+        )
+    return None
+
+
+def _check_inverter_mismatch(history_df: pd.DataFrame, latest_row: pd.Series) -> str | None:
+    inverter_a_column = "pv_production_inverter_energy_per_kwp_symo_12_5_3_m_2_kwh_per_kwp"
+    inverter_b_column = "pv_production_inverter_energy_per_kwp_symo_17_5_3_m_1_kwh_per_kwp"
+    if inverter_a_column not in history_df.columns or inverter_b_column not in history_df.columns:
+        return None
+
+    current_a = latest_row.get(inverter_a_column)
+    current_b = latest_row.get(inverter_b_column)
+    if pd.isna(current_a) or pd.isna(current_b) or float(current_b) <= 0:
+        return None
+
+    prior_rows = history_df.loc[history_df["report_date"] < latest_row["report_date"]].sort_values("report_date")
+    ratio_frame = prior_rows[[inverter_a_column, inverter_b_column]].dropna()
+    ratio_frame = ratio_frame.loc[ratio_frame[inverter_b_column] > 0]
+    historical_ratios = (ratio_frame[inverter_a_column] / ratio_frame[inverter_b_column]).tail(INVERTER_MISMATCH_LOOKBACK_DAYS)
+    if len(historical_ratios) < INVERTER_MISMATCH_MIN_HISTORY_DAYS:
+        return None
+
+    historical_ratio = float(historical_ratios.median())
+    if historical_ratio <= 0:
+        return None
+
+    current_ratio = float(current_a) / float(current_b)
+    deviation = abs(current_ratio - historical_ratio) / historical_ratio
+    if deviation < INVERTER_MISMATCH_DEVIATION_RATIO:
+        return None
+
+    underperforming_inverter = "Symo 12.5-3-M (2)"
+    if current_ratio > historical_ratio:
+        underperforming_inverter = "Symo 17.5-3-M (1)"
+
+    return (
+        "Inverter mismatch test failed: "
+        f"historical normalized inverter ratio median is {historical_ratio:.3f}, current ratio is {current_ratio:.3f}. "
+        f"This suggests underperformance by {underperforming_inverter}."
+    )
+
+
+def _run_panel_health_checks(history_root: Path, report_email: Message) -> list[str]:
+    history_df = load_history_dataframe(history_root)
+    if history_df.empty:
+        return []
+
+    latest_row = history_df.sort_values(["report_date", "archive_folder"]).iloc[-1]
+    findings = [
+        _check_zero_production(latest_row),
+        _check_sudden_production_drop(history_df, latest_row),
+        _check_inverter_mismatch(history_df, latest_row),
+    ]
+    findings = [finding for finding in findings if finding]
+    if not findings:
+        print("No panel-health warning conditions triggered for the latest report.")
+        return []
+
+    print("Panel-health warning conditions triggered:")
+    for finding in findings:
+        print(f"- {finding}")
+
+    try:
+        send_report_issue_warning(
+            report_email=report_email,
+            issue_title="Solar production anomaly detected",
+            issue_details="\n\n".join(findings),
+            extra_recipients=[os.getenv("PROTONMAIL_ISSUES_ADDRESS")],
+        )
+    except Exception as warning_error:
+        print(f"ERROR: Could not send panel-health warning email: {warning_error}")
+
+    return findings
+
+
 def _get_email_html(email_message: Message) -> str:
     if email_message.is_multipart():
         for part in email_message.walk():
@@ -244,7 +402,7 @@ def _download_to_temp(url: str, temp_dir: Path) -> Path:
 
 
 def _analyze_downloads(downloaded_files: list[Path]) -> None:
-    # Placeholder for upcoming analysis logic for freshly downloaded files.
+    # File-level analysis entry point for freshly downloaded reports.
     for file_path in downloaded_files:
         size = file_path.stat().st_size
         print(f"Prepared for analysis: {file_path.name} ({size} bytes)")
@@ -374,4 +532,5 @@ def process(email_message: Message | None) -> None:
         print(f"- {stored}")
 
     _refresh_history_exports(history_root)
+    _run_panel_health_checks(history_root, email_message)
     _print_history_dataframe_summary(history_root)

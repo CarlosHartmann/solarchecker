@@ -45,6 +45,8 @@ def _collect_report_recipients(report_email: Message | None, extra_recipients: I
 
     if extra_recipients:
         for address in extra_recipients:
+            if not address:
+                continue
             cleaned = address.strip()
             if cleaned and "@" in cleaned:
                 recipients.append(cleaned)
@@ -86,6 +88,7 @@ def send_report_issue_warning(
     smtp_user = os.environ["PROTONMAIL_USER"]
     smtp_pw = os.environ["PROTONMAIL_PW"]
     smtp_from = os.environ["PROTONMAIL_SMTP_FROM"]
+    subject_prefix = os.getenv("WARNING_EMAIL_SUBJECT_PREFIX", "")
 
     original_subject = report_email.get("Subject", "(no subject)") if report_email is not None else "(no source email)"
     original_date = report_email.get("Date", "(no date)") if report_email is not None else "(no source email)"
@@ -93,7 +96,7 @@ def send_report_issue_warning(
     warning = EmailMessage()
     warning["From"] = smtp_from
     warning["To"] = ", ".join(recipients)
-    warning["Subject"] = f"[Solarchecker Warning] {issue_title}"
+    warning["Subject"] = f"{subject_prefix}[Solarchecker Warning] {issue_title}"
 
     warning.set_content(
         "\n".join(

@@ -119,6 +119,66 @@ Warning emails are sent only in selected failure cases:
 
 Other retrieval issues currently print to terminal only.
 
+## Panel Health Checks
+
+After a new report is archived, the script evaluates the latest available day in
+the normalized history dataframe and runs three panel-health checks.
+
+If one or more checks fail, the script sends one combined warning email with all
+findings instead of sending one email per failed test.
+
+### 1. Zero-production test
+
+This is a hard-failure check.
+
+- Field used: `pv_production_system_total_kwh`
+- Current threshold: production less than or equal to `0.1 kWh`
+
+If the total system production for the newest report day is effectively zero,
+the script treats that as a strong sign that the installation may not be
+working.
+
+### 2. Sudden production drop test
+
+This checks whether the newest day is implausibly weak compared with recent
+history.
+
+- Field used: `pv_production_system_total_kwh`
+- Baseline: median of the previous 7 available report days
+- Minimum history required: 3 earlier days
+- Minimum baseline required: `1.0 kWh`
+- Warning threshold: current production below `35%` of that recent median
+
+This is meant to catch abrupt system-wide underperformance while avoiding noisy
+warnings on very low-production days.
+
+### 3. Inverter mismatch test
+
+This checks whether one inverter suddenly underperforms relative to the other.
+
+- Fields used:
+   - `pv_production_inverter_energy_per_kwp_symo_12_5_3_m_2_kwh_per_kwp`
+   - `pv_production_inverter_energy_per_kwp_symo_17_5_3_m_1_kwh_per_kwp`
+- Baseline: median of the historical ratio between those two normalized values
+   over the previous 14 available report days
+- Minimum history required: 5 earlier days
+- Warning threshold: deviation of more than `35%` from the historical median
+   ratio
+
+Because the values are normalized per kWp, this test is intended to detect a
+partial failure on one inverter rather than a site-wide low-production day.
+
+### When checks run
+
+These checks run automatically as part of:
+
+```bash
+poetry run python main.py
+```
+
+They use the archived files in `history/`, so the aggregate exports and the
+warning logic are both based on the same normalized history data.
+
 ## Notes
 
 - `history/` and `seziertisch/` are ignored by git.
