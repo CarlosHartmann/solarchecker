@@ -11,7 +11,7 @@ import imaplib
 
 from datetime import datetime
 
-from notification_emails import send_issue_warning_to_issue_inbox, send_report_issue_warning
+from .notification_emails import send_issue_warning_to_issue_inbox, send_report_issue_warning
 
 
 def parse_internal_date(fetch_meta_bytes):

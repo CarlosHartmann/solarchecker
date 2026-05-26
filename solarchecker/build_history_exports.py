@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from report_mappings import (
+from .report_mappings import (
     ENERGY_BALANCE_LABELS,
     PV_PRODUCTION_LABELS,
     REPORT_TYPE_PATTERNS,
@@ -167,7 +167,7 @@ def build_history_exports(history_root: Path, output_dir: Path | None = None) ->
 
 
 def main() -> None:
-    base_dir = Path(__file__).resolve().parent
+    base_dir = Path.cwd()
     history_root = base_dir / "history"
     written_files = build_history_exports(history_root)
 

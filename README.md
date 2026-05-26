@@ -24,12 +24,11 @@ The current reports are:
 
 ## Repository Layout
 
-- `main.py`: entrypoint for the full workflow
-- `access_mails.py`: ProtonMail IMAP access and newest-email retrieval
-- `process_mail.py`: email parsing, downloading, staging, archiving, dataframe loading, export refresh
-- `build_history_exports.py`: standalone script to rebuild the aggregate Excel exports from `history/`
-- `notification_emails.py`: warning email sending
-- `report_mappings.py`: centralized report header and unit mappings
+- `solarchecker/`: installable package containing the application code
+- `solarchecker/access_mails.py`: ProtonMail IMAP access and newest-email retrieval
+- `solarchecker/process_mail.py`: email parsing, downloading, staging, archiving, dataframe loading, export refresh
+- `solarchecker/notification_emails.py`: warning email sending
+- `solarchecker/report_mappings.py`: centralized report header and unit mappings
 - `history/`: archived daily report files and aggregate exports, ignored by git
 - `seziertisch/`: local staging folder for analysis, ignored by git
 
@@ -70,13 +69,13 @@ If no warning path is triggered, the SMTP variables are not needed for a success
 Run the full workflow:
 
 ```bash
-poetry run python main.py
+poetry run solarchecker
 ```
 
 Rebuild aggregate exports from the current archive only:
 
 ```bash
-poetry run python build_history_exports.py
+poetry run python -m solarchecker.build_history_exports
 ```
 
 ## Output Files

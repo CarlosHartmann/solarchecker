@@ -53,9 +53,9 @@ from urllib.parse import unquote
 from urllib.request import Request, urlopen
 
 import pandas as pd
-from build_history_exports import build_history_exports
-from notification_emails import send_report_issue_warning
-from report_mappings import (
+from .build_history_exports import build_history_exports
+from .notification_emails import send_report_issue_warning
+from .report_mappings import (
     ENERGY_BALANCE_LABELS,
     PV_PRODUCTION_LABELS,
     REPORT_TYPE_PATTERNS,
@@ -437,7 +437,7 @@ def _make_folder_stamp(email_message: Message) -> str:
 
 
 def _move_to_analysis_folder(downloaded_files: list[Path], email_message: Message) -> list[Path]:
-    base_dir = Path(__file__).resolve().parent
+    base_dir = Path.cwd()
     analysis_root = base_dir / "seziertisch"
     analysis_root.mkdir(parents=True, exist_ok=True)
 
@@ -458,7 +458,7 @@ def _move_to_analysis_folder(downloaded_files: list[Path], email_message: Messag
 
 
 def _archive_downloads(analyzed_files: list[Path], email_message: Message) -> list[Path]:
-    base_dir = Path(__file__).resolve().parent
+    base_dir = Path.cwd()
     history_root = base_dir / "history"
     history_root.mkdir(parents=True, exist_ok=True)
 
@@ -479,7 +479,7 @@ def _archive_downloads(analyzed_files: list[Path], email_message: Message) -> li
 
 
 def process(email_message: Message | None) -> None:
-    base_dir = Path(__file__).resolve().parent
+    base_dir = Path.cwd()
     history_root = base_dir / "history"
 
     if email_message is None:

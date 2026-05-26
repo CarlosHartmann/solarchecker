@@ -4,11 +4,16 @@ version = "0.1.0"
 description = ""
 authors = ["Smogshaik <github@smog.sh>"]
 readme = "README.md"
+packages = [{ include = "solarchecker" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"
 pandas = "^3.0.3"
 openpyxl = "^3.1.5"
+
+[tool.poetry.scripts]
+solarchecker = "solarchecker.main:main"
+solarchecker-tests = "solarchecker.run_warning_email_tests:main"
 
 
 [build-system]

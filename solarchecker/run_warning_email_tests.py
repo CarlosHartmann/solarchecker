@@ -14,8 +14,8 @@ from contextlib import contextmanager
 from email.message import EmailMessage
 from pathlib import Path
 
-import access_mails
-from process_mail import _run_panel_health_checks
+from . import access_mails
+from .process_mail import _run_panel_health_checks
 
 
 TEST_SUBJECT_PREFIX = "[TEST -- PLEASE IGNORE] "

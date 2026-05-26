@@ -1,5 +1,5 @@
-from access_mails import connect_to_protonmail, retrieve_newest_email
-from process_mail import process
+from .access_mails import connect_to_protonmail, retrieve_newest_email
+from .process_mail import process
 
 def main():
     protonmail = connect_to_protonmail()
