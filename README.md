@@ -121,7 +121,7 @@ Other retrieval issues currently print to terminal only.
 ## Panel Health Checks
 
 After a new report is archived, the script evaluates the latest available day in
-the normalized history dataframe and runs three panel-health checks.
+the normalized history dataframe and runs four panel-health checks.
 
 If one or more checks fail, the script sends one combined warning email with all
 findings instead of sending one email per failed test.
@@ -167,12 +167,27 @@ This checks whether one inverter suddenly underperforms relative to the other.
 Because the values are normalized per kWp, this test is intended to detect a
 partial failure on one inverter rather than a site-wide low-production day.
 
+### 4. Inverter minimum-share test
+
+This checks whether either inverter contributes implausibly little to the
+day's total system production.
+
+- Fields used:
+   - `pv_production_inverter_energy_symo_12_5_3_m_2_kwh`
+   - `pv_production_inverter_energy_symo_17_5_3_m_1_kwh`
+   - `pv_production_system_total_kwh`
+- Minimum total production required: `3.0 kWh`
+- Warning threshold: any single inverter below `30%` of the day's total
+
+This guards against single-inverter underperformance even when total production
+is not low enough to trigger the sudden-drop test.
+
 ### When checks run
 
 These checks run automatically as part of:
 
 ```bash
-poetry run python main.py
+poetry run solarchecker
 ```
 
 They use the archived files in `history/`, so the aggregate exports and the

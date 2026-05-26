@@ -19,6 +19,12 @@ Warning tests implemented
     than the other relative to its historical ratio, warn.
     Location: _check_inverter_mismatch()
 
+4. Inverter share test:
+    If any single inverter's raw kWh output is less than 30% of the system's
+    total daily production, warn. Only evaluated on days where total production
+    is at least 3.0 kWh (to avoid false positives on near-zero low-light days).
+    Location: _check_inverter_share()
+
 Trigger point:
     _run_panel_health_checks(), called from process() after the newest reports
     have been archived and aggregate exports have been refreshed.
@@ -71,6 +77,8 @@ SUDDEN_DROP_BASELINE_MIN_KWH = 1.0
 INVERTER_MISMATCH_LOOKBACK_DAYS = 14
 INVERTER_MISMATCH_MIN_HISTORY_DAYS = 5
 INVERTER_MISMATCH_DEVIATION_RATIO = 0.35
+INVERTER_SHARE_MIN_FRACTION = 0.30
+INVERTER_SHARE_MIN_TOTAL_KWH = 3.0
 
 
 class DownloadLinkParser(HTMLParser):
@@ -308,6 +316,46 @@ def _check_inverter_mismatch(history_df: pd.DataFrame, latest_row: pd.Series) ->
     )
 
 
+def _check_inverter_share(latest_row: pd.Series) -> str | None:
+    total_column = "pv_production_system_total_kwh"
+    inverter_a_column = "pv_production_inverter_energy_symo_12_5_3_m_2_kwh"
+    inverter_b_column = "pv_production_inverter_energy_symo_17_5_3_m_1_kwh"
+
+    total = latest_row.get(total_column)
+    if pd.isna(total):
+        return None
+
+    total_value = float(total)
+    if total_value < INVERTER_SHARE_MIN_TOTAL_KWH:
+        return None
+
+    inverters = {
+        "Symo 12.5-3-M (2)": latest_row.get(inverter_a_column),
+        "Symo 17.5-3-M (1)": latest_row.get(inverter_b_column),
+    }
+
+    low_share_items: list[str] = []
+    for name, energy in inverters.items():
+        if pd.isna(energy):
+            continue
+        energy_value = float(energy)
+        share = energy_value / total_value
+        if share < INVERTER_SHARE_MIN_FRACTION:
+            low_share_items.append(
+                f"{name}: {energy_value:.3f} kWh ({share:.1%} der Tagesproduktion)"
+            )
+
+    if not low_share_items:
+        return None
+
+    return (
+        "Test auf Wechselrichter-Mindestanteil fehlgeschlagen: "
+        "Ein Wechselrichter hat weniger als 30% der Tagesproduktion geliefert. "
+        + "; ".join(low_share_items)
+        + f" (Gesamtproduktion: {total_value:.3f} kWh am {latest_row['report_date'].date()})."
+    )
+
+
 def _run_panel_health_checks(history_root: Path, report_email: Message) -> list[str]:
     history_df = load_history_dataframe(history_root)
     if history_df.empty:
@@ -318,6 +366,7 @@ def _run_panel_health_checks(history_root: Path, report_email: Message) -> list[
         _check_zero_production(latest_row),
         _check_sudden_production_drop(history_df, latest_row),
         _check_inverter_mismatch(history_df, latest_row),
+        _check_inverter_share(latest_row),
     ]
     findings = [finding for finding in findings if finding]
     if not findings:
