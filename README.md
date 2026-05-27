@@ -197,3 +197,25 @@ warning logic are both based on the same normalized history data.
 
 - `history/` and `seziertisch/` are ignored by git.
 - Aggregate exports are rebuilt from the archive, so they stay consistent with the contents of `history/`.
+
+## Yearly February Upload Task (launchd)
+
+An additional launchd task can upload yearly aggregate files to the remote
+storage target.
+
+- Launch agent file: `~/Library/LaunchAgents/solarchecker.february_history_upload.plist`
+- Schedule: every year on February 5 at 13:00 local time
+- Execution mode: inline `zsh -lc` command in the launch agent
+
+What it does on each run:
+
+1. Computes the remote subdirectory name dynamically as `YYYY-FebYYYY+1`
+   (example for 2026: `2026-Feb2027`).
+2. Creates the remote directory via:
+   `rclone mkdir almazen:solardaten/<computed-dir>`
+3. Finds `*gesamt*.xlsx` files in `history/`.
+4. Moves each of those files via:
+   `rclone-custom move <file> almazen:solardaten/<computed-dir>`
+
+The launch command sources `~/.zshrc` so that the `rclone-custom` shell
+function is available in the non-interactive launchd environment.
